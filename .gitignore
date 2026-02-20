@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+
+# Backtest outputs (regenerated on run)
+equity_curve.csv
+equity_curve.png
+tradelog.csv
+
+# Optional: uncomment to keep repo small (data added locally or via release)
+# Cleaned PE Data/
+# Cleaned PE Data No Outliers/
+# Final Input*/
+
+# Misc
+*.log
+empty_quarters_report.csv
+.DS_Store
+Thumbs.db
