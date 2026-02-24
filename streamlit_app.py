@@ -2,16 +2,41 @@
 PE Discount-to-Median Backtest — Streamlit frontend (interactive).
 Run: streamlit run streamlit_app.py
 """
+import sys
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPT_DIR))
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from pathlib import Path
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from pe_backtest import load_all_data, run_backtest, metrics
+
+# Must be first Streamlit command
+st.set_page_config(
+    page_title="PE Discount Backtest",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+try:
+    from pe_backtest import load_all_data, run_backtest, metrics, fetch_nifty50_yahoo
+except Exception as e:
+    st.error(f"**Failed to load backtest module:** {e}")
+    st.stop()
+
+CLEANED_DIR = _SCRIPT_DIR / "Cleaned PE Data No Outliers"
+
+def _data_available():
+    """True if the data folder exists and has at least one CSV."""
+    try:
+        return CLEANED_DIR.is_dir() and len(list(CLEANED_DIR.glob("*.csv"))) > 0
+    except Exception:
+        return False
 
 # Optional: Plotly for interactive chart
 try:
@@ -21,18 +46,10 @@ try:
 except ImportError:
     HAS_PLOTLY = False
 
-st.set_page_config(
-    page_title="PE Discount Backtest",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
 st.markdown("""
 <style>
     .hero { padding: 1.5rem 0; border-bottom: 1px solid #eee; margin-bottom: 1.5rem; }
     .param-card { background: #f0f2f6; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.25rem 0; font-size: 0.9rem; }
-    .preset-btn { margin: 0.2rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -45,19 +62,6 @@ for key, default in [("lookback", 3), ("discount", 0.2), ("holding", 2), ("fixed
 
 # Presets: update session state when clicked
 st.sidebar.header("⚙️ Strategy parameters")
-st.sidebar.caption("Quick presets (click to apply):")
-preset_col1, preset_col2 = st.sidebar.columns(2)
-with preset_col1:
-    if st.button("Conservative", key="preset_cons", help="L=4, 20%, H=3"):
-        st.session_state.update(lookback=4, discount=0.2, holding=3, fixed_q4=False)
-    if st.button("Moderate", key="preset_mod", help="L=3, 25%, H=2"):
-        st.session_state.update(lookback=3, discount=0.25, holding=2, fixed_q4=False)
-with preset_col2:
-    if st.button("Aggressive", key="preset_agg", help="L=2, 50%, H=1"):
-        st.session_state.update(lookback=2, discount=0.5, holding=1, fixed_q4=False)
-    if st.button("Option A", key="preset_q4", help="L=3, 20%, fixed Q4"):
-        st.session_state.update(lookback=3, discount=0.2, holding=3, fixed_q4=True)
-st.sidebar.markdown("---")
 
 with st.sidebar.expander("What do these mean?", expanded=False):
     st.markdown("""
@@ -86,6 +90,16 @@ max_pct = (1 - discount) * 100
 st.sidebar.markdown(f"**Screen:** PE ≤ **{max_pct:.0f}%** of median PE")
 st.sidebar.markdown("---")
 
+# Data status (quick check without loading all CSVs)
+try:
+    _n_csvs = len(list(CLEANED_DIR.glob("*.csv"))) if CLEANED_DIR.is_dir() else 0
+except Exception:
+    _n_csvs = 0
+if _n_csvs > 0:
+    st.sidebar.success(f"✓ Data ready ({_n_csvs} companies)")
+else:
+    st.sidebar.warning("⚠ No data folder — add **Cleaned PE Data No Outliers** with CSVs to run backtests.")
+
 run = st.sidebar.button("▶️ Run backtest", type="primary", use_container_width=True)
 st.sidebar.caption("Data: Cleaned PE Data No Outliers")
 
@@ -95,7 +109,15 @@ st.title("📈 PE Discount-to-Median Backtest")
 st.markdown(
     "Backtest a strategy that buys stocks when **PE ≤ (1 − discount) × median PE**, holds for **H** quarters, then sells. Compare to NIFTY 50."
 )
+st.caption("**Getting started:** Set parameters in the sidebar → click **Run backtest** → view results in the tabs below.")
 st.markdown('</div>', unsafe_allow_html=True)
+
+if not _data_available():
+    st.warning(
+        "**No data folder found.** The app needs the **Cleaned PE Data No Outliers** folder with company CSVs. "
+        "On Streamlit Community Cloud this folder is often not in the repo (size limits). "
+        "To run backtests: clone the repo, add that folder locally, and run `streamlit run streamlit_app.py`, or add a small sample of CSVs to the repo for the web app."
+    )
 
 tab_overview, tab_backtest, tab_tradelog, tab_downloads = st.tabs(["📋 Overview", "📊 Backtest & results", "📜 Tradelog", "⬇️ Downloads"])
 
@@ -105,7 +127,7 @@ with tab_overview:
     st.markdown("""
     1. **Screen** — Each rebalance quarter: median PE over last **L** quarters; keep only **PE ≤ (1 − discount) × median PE**.
     2. **Buy** — Equal weight at each stock’s last valid day in the quarter.
-    3. **Hold** — **H** quarters (or 3 in Option A).
+    3. **Hold** — **H** quarters.
     4. **Sell** — Last trading day of exit quarter.
     5. **Repeat** — No overlapping cohorts.
     """)
@@ -128,7 +150,10 @@ if run:
     with st.spinner("Loading data..."):
         data = load_all_data(progress=False)
     if not data:
-        st.error("No data found. Ensure **Cleaned PE Data No Outliers** exists with company CSVs.")
+        st.error(
+            "No data found. Ensure **Cleaned PE Data No Outliers** exists with company CSVs. "
+            "On the web, the repo may not include this folder—run the app locally with your data."
+        )
         st.stop()
     n_companies = len(data)
     progress_bar = st.progress(0, text="Running backtest...")
@@ -146,6 +171,13 @@ if run:
     progress_bar.empty()
     progress_placeholder.empty()
 
+    # Fetch NIFTY 50 from Yahoo if no benchmark CSV was used (same as CLI)
+    if (benchmark_series is None or len(benchmark_series) == 0) and equity is not None and len(equity) >= 2:
+        with st.spinner("Fetching NIFTY 50 benchmark..."):
+            benchmark_series = fetch_nifty50_yahoo(
+                equity.index.min(), equity.index.max(), equity.index
+            )
+
     if equity is None or len(equity) < 2:
         st.warning("No results: no companies passed the screen. Try a **lower discount** or **shorter lookback**.")
         st.stop()
@@ -157,7 +189,7 @@ if run:
         "metrics": m,
         "params": {"lookback": lookback, "discount": discount, "holding": holding, "fixed_q4": fixed_q4},
         "n_companies": n_companies,
-        "benchmark_series": benchmark_series,
+        "benchmark_series": benchmark_series,  # may be from CSV or Yahoo
     }
     st.sidebar.success(f"Loaded {n_companies} companies. Backtest done.")
     st.rerun()
@@ -165,7 +197,8 @@ if run:
 # Backtest tab
 with tab_backtest:
     if st.session_state.backtest_results is None:
-        st.info("👈 Set parameters and click **Run backtest** to see the equity curve and metrics.")
+        st.info("👈 Set parameters in the sidebar and click **Run backtest** to see the equity curve and metrics.")
+        st.caption("Suggested starting point: Lookback 3, Discount 20%, Holding 2.")
     else:
         res = st.session_state.backtest_results
         equity = res["equity"]
@@ -245,6 +278,13 @@ with tab_backtest:
         col5.metric("Max drawdown", f"{m.get('MaxDD', 0):.2%}")
         if "Benchmark_CAGR" in m:
             st.caption(f"**Benchmark (NIFTY 50):** CAGR {m['Benchmark_CAGR']:.2%}  ·  Sharpe {m.get('Benchmark_Sharpe', 0):.2f}")
+        with st.expander("About these metrics", expanded=False):
+            st.markdown("""
+            - **CAGR:** Compound annual growth rate of the strategy.
+            - **Sharpe (ann.):** Annualized Sharpe ratio (risk-adjusted return; higher is better).
+            - **Calmar:** CAGR divided by max drawdown (higher is better).
+            - **Max drawdown:** Largest peak-to-trough decline.
+            """)
 
 # Tradelog tab
 with tab_tradelog:
@@ -254,7 +294,7 @@ with tab_tradelog:
         tradelog = st.session_state.backtest_results["tradelog"]
         if tradelog is not None and len(tradelog) > 0:
             tradelog["date"] = pd.to_datetime(tradelog["date"])
-            st.caption(f"Total rows: {len(tradelog)}. Filter below.")
+            st.caption("Filter below.")
             filter_col1, filter_col2, filter_col3 = st.columns(3)
             with filter_col1:
                 action_filter = st.selectbox("Action", ["All", "buy", "sell"], key="tl_action")
@@ -264,7 +304,7 @@ with tab_tradelog:
             with filter_col3:
                 min_date = tradelog["date"].min().date()
                 max_date = tradelog["date"].max().date()
-                date_range = st.date_input("Date range", value=(min_date, max_date), key="tl_date")
+                date_range = st.date_input("Date range (start → end)", value=(min_date, max_date), key="tl_date", help="Select start and end date for the tradelog.")
             df_show = tradelog.copy()
             if action_filter != "All":
                 df_show = df_show[df_show["action"] == action_filter]
@@ -272,6 +312,9 @@ with tab_tradelog:
                 df_show = df_show[df_show["company"].isin(company_filter)]
             if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
                 df_show = df_show[(df_show["date"].dt.date >= date_range[0]) & (df_show["date"].dt.date <= date_range[1])]
+            total_rows = len(tradelog)
+            shown_rows = len(df_show)
+            st.caption(f"Showing **{shown_rows}** of **{total_rows}** trades.")
             st.dataframe(df_show, use_container_width=True, height=400)
         else:
             st.write("No trades in this run.")
@@ -284,16 +327,19 @@ with tab_downloads:
         res = st.session_state.backtest_results
         equity = res["equity"]
         tradelog = res["tradelog"]
+        p = res["params"]
+        run_label = f"L{p['lookback']}_d{int(p['discount']*100)}_H{p['holding']}"
+        st.caption(f"Files from latest run: Lookback {p['lookback']}, Discount {p['discount']:.0%}, Holding {p['holding']}Q.")
         col_a, col_b = st.columns(2)
         with col_a:
             st.subheader("Equity curve")
             equity_df = equity.to_frame(name="Value")
             equity_df.index.name = "Date"
-            st.download_button("Download equity_curve.csv", data=equity_df.to_csv(), file_name="equity_curve.csv", mime="text/csv", key="dl_equity")
+            st.download_button("Download equity_curve.csv", data=equity_df.to_csv(), file_name=f"equity_curve_{run_label}.csv", mime="text/csv", key="dl_equity")
         with col_b:
             st.subheader("Tradelog")
             if tradelog is not None and len(tradelog) > 0:
-                st.download_button("Download tradelog.csv", data=tradelog.to_csv(index=False), file_name="tradelog.csv", mime="text/csv", key="dl_tradelog")
+                st.download_button("Download tradelog.csv", data=tradelog.to_csv(index=False), file_name=f"tradelog_{run_label}.csv", mime="text/csv", key="dl_tradelog")
             else:
                 st.caption("No tradelog for this run.")
 

@@ -1,0 +1,7 @@
+[server]
+# Allow longer runs for backtest (Streamlit Cloud may still enforce limits)
+runOnSave = false
+maxUploadSize = 200
+
+[browser]
+gatherUsageStats = false
