@@ -193,7 +193,9 @@ with tab_backtest:
         res = st.session_state.backtest_results
         equity = res["equity"]
         m = res["metrics"]
-        num_trades = len(res["tradelog"]) if res["tradelog"] is not None else 0
+        # One round-trip (one buy + one sell) = one trade; count sells
+        tl = res["tradelog"]
+        num_trades = int((tl["action"] == "sell").sum()) if tl is not None and len(tl) > 0 and "action" in tl.columns else 0
         lookback = res["params"]["lookback"]
         discount = res["params"]["discount"]
         holding = res["params"]["holding"]
@@ -219,15 +221,19 @@ with tab_backtest:
                 x=equity_sub.index, y=equity_sub.values, name="Strategy",
                 line=dict(color="#1f77b4", width=2), mode="lines"
             ))
+            bm_plotted = False
             if benchmark_series is not None and len(benchmark_series) > 0:
                 bm_cum = (1 + benchmark_series).cumprod()
                 bm_cum = bm_cum / bm_cum.iloc[0]
                 bm_sub = bm_cum[(bm_cum.index.date >= chart_start) & (bm_cum.index.date <= chart_end)]
+                if len(bm_sub) < 2:
+                    bm_sub = bm_cum.reindex(equity_sub.index).ffill().bfill().dropna()
                 if len(bm_sub) > 0:
                     fig.add_trace(go.Scatter(
                         x=bm_sub.index, y=bm_sub.values, name="NIFTY 50",
-                        line=dict(color="#7f7f7f", width=1.5, dash="dot"), mode="lines"
+                        line=dict(color="#e74c3c", width=1.8), mode="lines"
                     ))
+                    bm_plotted = True
             fig.update_layout(
                 yaxis_type="log",
                 xaxis_title="Date",
@@ -239,15 +245,25 @@ with tab_backtest:
                 height=450,
             )
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Interactive: zoom, pan, hover for values. Use the toolbar to reset view.")
+            if bm_plotted:
+                st.caption("Interactive: zoom, pan, hover for values. Use the toolbar to reset view.")
+            else:
+                st.caption("**NIFTY 50** line not shown: benchmark could not be loaded (e.g. Yahoo Finance unavailable or network). Run locally with internet to see both curves.")
         else:
             fig, ax = plt.subplots(figsize=(11, 5))
             ax.plot(equity_sub.index, equity_sub.values, label="Strategy", color="#1f77b4", linewidth=1.5)
+            bm_plotted = False
             if benchmark_series is not None and len(benchmark_series) > 0:
                 bm_cum = (1 + benchmark_series).cumprod()
                 bm_cum = bm_cum / bm_cum.iloc[0]
                 bm_sub = bm_cum[(bm_cum.index >= equity_sub.index.min()) & (bm_cum.index <= equity_sub.index.max())]
-                ax.plot(bm_sub.index, bm_sub.values, label="NIFTY 50", color="#7f7f7f", linewidth=1.2, alpha=0.9)
+                if len(bm_sub) < 2:
+                    bm_sub = bm_cum.reindex(equity_sub.index).ffill().bfill().dropna()
+                if len(bm_sub) > 0:
+                    ax.plot(bm_sub.index, bm_sub.values, label="NIFTY 50", color="#e74c3c", linewidth=1.8, alpha=0.9)
+                    bm_plotted = True
+            if not bm_plotted:
+                st.caption("**NIFTY 50** line not shown: benchmark could not be loaded (e.g. Yahoo Finance unavailable or network). Run locally with internet to see both curves.")
             ax.set_xlabel("Date")
             ax.set_ylabel("Cumulative return (normalized, start = 1)")
             ax.set_yscale("log")

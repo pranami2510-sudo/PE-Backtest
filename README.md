@@ -61,19 +61,26 @@ python pe_backtest.py --fixed-q4 --lookback 3 --discount 0.2
 pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
-Then open the URL shown (e.g. http://localhost:8501). Use the sidebar to set lookback, discount, holding, and Option A; click **Run backtest** to see the equity curve and metrics.
+Then open the URL shown (e.g. http://localhost:8501). Use the sidebar to set lookback, discount, and holding; click **Run backtest** to see the equity curve and metrics.
 
 ## Host on Streamlit Cloud
 
-1. **Push the repo to GitHub** (you already have [pranami2510-sudo/PE-Backtest](https://github.com/pranami2510-sudo/PE-Backtest)).
-2. Go to **[share.streamlit.io](https://share.streamlit.io)** and sign in with GitHub.
-3. Click **"New app"**.
-4. **Repository:** `pranami2510-sudo/PE-Backtest`  
-   **Branch:** `main`  
-   **Main file path:** `streamlit_app.py`
-5. Click **"Deploy!"**. The first run may take a few minutes (install deps + load data). Your app will be at `https://<your-app-name>.streamlit.app`.
+1. **Push the repo to GitHub** (e.g. [pranami2510-sudo/PE-Backtest](https://github.com/pranami2510-sudo/PE-Backtest)).
+2. Go to **[share.streamlit.io](https://share.streamlit.io)** and **sign in with the same GitHub account that owns the repo** (e.g. `pranami2510-sudo`). If you use multiple GitHub accounts, sign out and sign in with the one that has the repo.
+3. Click **"New app"** (or "Deploy an app").
+4. Fill the form:
+   - **Repository:** `pranami2510-sudo/PE-Backtest` (or paste the repo URL)
+   - **Branch:** `main` (not `master`)
+   - **Main file path:** `streamlit_app.py`
+   - **App URL (optional):** e.g. `pricetoearningsbacktest` → app will be at `https://pricetoearningsbacktest.streamlit.app`
+5. Click **Deploy**. Wait a few minutes for the first build. Open the app from the link Streamlit shows (or from **Your apps** in the dashboard).
 
-**Note:** The app uses the data in **Cleaned PE Data No Outliers** from the repo. If that folder is large, the first load on Streamlit Cloud can be slow; consider using a smaller sample for the hosted app or keeping data in the repo as-is.
+**If you see "You do not have access to this app":**
+- You're likely opening a URL for an app that wasn’t deployed from your account, or the app was never created. Always open the app from **share.streamlit.io → Your apps → [your app]** so you use the correct URL.
+- Ensure you’re signed in with the **GitHub account that owns the repo**. In Streamlit Cloud settings, check **Source control** / connected account and reconnect GitHub if needed.
+- If the repo is **private**, grant Streamlit access to it in GitHub (Settings → Applications → Authorized OAuth Apps), or make the repo **public**.
+
+**Note:** The app reads data from **Cleaned PE Data No Outliers**. If that folder isn’t in the repo (e.g. too large), the hosted app will load but show "No data folder"; run backtests locally with your data or add a small sample of CSVs to the repo.
 
 ## Project structure
 

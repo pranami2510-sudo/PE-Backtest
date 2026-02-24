@@ -539,7 +539,8 @@ def main():
     else:
         print("  Using benchmark from CSV.")
 
-    num_trades = len(tradelog)
+    # One round-trip (one buy + one sell) = one trade; count sells
+    num_trades = int((tradelog["action"] == "sell").sum()) if "action" in tradelog.columns else len(tradelog) // 2
     m = metrics(equity, benchmark_series)
 
     print("\n=== OUTPUTS ===")
