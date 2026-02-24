@@ -19,7 +19,7 @@ At fixed rebalance dates, buy only stocks whose **current PE is at a discount** 
 
 ## 3. When we rebalance and when we sell
 
-### 3.1 Standard (rolling) mode
+### 3.1 Standard (rolling) Mode
 
 - **First rebalance:** The first quarter for which we have **L quarters of history** (so we can compute median PE over L quarters).
 - **Next rebalances:** Every **H quarters** after that (e.g. if H = 2, we rebalance at quarters 2, 4, 6, …).
@@ -36,7 +36,7 @@ Rebalance (L=3):           ●         ●         ●         ...
 
 **Formula:** Number of rebalance quarters = floor((N − L + 1) / H), where N = total quarters in data.
 
-### 3.2 Option A (fixed Q4)
+### 3.2 Fixed Mode 
 
 - **Rebalance:** Only at **end of Q4** (e.g. 2005-Q4, 2006-Q4, …).
 - **Hold:** 3 quarters (Q1, Q2, Q3 of the next year).
@@ -128,14 +128,13 @@ Final curve: 1.0 —— … —— V1 —— … —— V2 —— … (one conti
 
 ---
 
-## 8. Flow diagram (high level)
+## 8. Flow diagram 
 
 ```
                     ┌──────────────────┐
                     │  Load company    │
-                    │  CSVs (No       │
-                    │  Outliers)      │
-                    └────────┬────────┘
+                    │  CSVs     
+                    └────────┬──────── ┘
                              │
                              ▼
                     ┌──────────────────┐
@@ -143,7 +142,7 @@ Final curve: 1.0 —— … —— V1 —— … —— V2 —— … (one conti
                     │  quarters (every │
                     │  H quarters or   │
                     │  Q4 if Option A) │
-                    └────────┬────────┘
+                    └────────┬──────── ┘
                              │
          ┌───────────────────┴───────────────────┐
          ▼                                       ▼
@@ -152,11 +151,11 @@ Final curve: 1.0 —— … —— V1 —— … —— V2 —— … (one conti
   │ rebal quarter│                        │ PE ≤ (1-d)*  │
   │              │                        │ median_PE    │
   └──────┬───────┘                        └──────┬───────┘
-         │                                      │
-         │         ┌────────────────────────────┘
+         │                                       │
+         │         ┌─────────────────────────── ─┘
          ▼         ▼
   ┌──────────────┐
-  │ Buy passers   │
+  │ Buy passers  │
   │ (equal weight│
   │  at last day │
   │  of quarter) │
@@ -172,7 +171,7 @@ Final curve: 1.0 —— … —— V1 —— … —— V2 —— … (one conti
                       ┌──────────────┐
                       │ Chain value  │
                       │ → equity     │
-                      │   curve     │
+                      │   curve      │
                       └──────────────┘
 ```
 
@@ -199,5 +198,3 @@ Next rebalance:                                                          ^
 ```
 
 ---
-
-*This log describes the strategy implemented in `pe_backtest.py`. Data is built from `Cleaned PE Data` using `build_cleaned_no_outliers.py`.*

@@ -56,7 +56,7 @@ st.markdown("""
 # Session state
 if "backtest_results" not in st.session_state:
     st.session_state.backtest_results = None
-for key, default in [("lookback", 3), ("discount", 0.2), ("holding", 2), ("fixed_q4", False)]:
+for key, default in [("lookback", 3), ("discount", 0.2), ("holding", 2)]:
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -68,22 +68,15 @@ with st.sidebar.expander("What do these mean?", expanded=False):
     - **Lookback:** Quarters of history for median PE.
     - **Discount:** Buy only if PE ≤ (1 − discount) × median PE.
     - **Holding:** Quarters to hold each cohort.
-    - **Option A:** Rebalance only at end of Q4, hold 3Q, cash in Q4.
     """)
 
 lookback = st.sidebar.slider("Lookback (quarters)", 1, 20, value=st.session_state.get("lookback", 3), key="sb_lookback")
 discount = st.sidebar.slider("Discount to median PE", 0.10, 0.90, value=float(st.session_state.get("discount", 0.2)), step=0.05, key="sb_discount")
-fixed_q4 = st.sidebar.checkbox("Option A (fixed Q4)", value=st.session_state.get("fixed_q4", False), key="sb_fixed_q4")
-if fixed_q4:
-    holding = 3
-    st.sidebar.caption("Holding fixed at 3 quarters.")
-else:
-    holding = st.sidebar.slider("Holding (quarters)", 1, 5, value=st.session_state.get("holding", 2), key="sb_holding")
+holding = st.sidebar.slider("Holding (quarters)", 1, 5, value=st.session_state.get("holding", 2), key="sb_holding")
 # Persist for next run
 st.session_state["lookback"] = lookback
 st.session_state["discount"] = discount
 st.session_state["holding"] = holding
-st.session_state["fixed_q4"] = fixed_q4
 
 # Reactive summary
 max_pct = (1 - discount) * 100
@@ -101,7 +94,6 @@ else:
     st.sidebar.warning("⚠ No data folder — add **Cleaned PE Data No Outliers** with CSVs to run backtests.")
 
 run = st.sidebar.button("▶️ Run backtest", type="primary", use_container_width=True)
-st.sidebar.caption("Data: Cleaned PE Data No Outliers")
 
 # Header
 st.markdown('<div class="hero">', unsafe_allow_html=True)
@@ -142,8 +134,6 @@ with tab_overview:
     with c3:
         st.markdown("**Holding**")
         st.caption(f"{holding} quarter(s)")
-    if fixed_q4:
-        st.info("Option A: rebalance only at end of Q4, hold 3Q, cash in Q4.")
 
 # Run backtest
 if run:
@@ -166,7 +156,7 @@ if run:
         with st.spinner("Running backtest (typically 1–2 min)..."):
             tradelog, equity, benchmark_series, _, _ = run_backtest(
                 data, lookback, discount, holding,
-                benchmark_path="", progress_callback=progress_cb, fixed_q4=fixed_q4
+                benchmark_path="", progress_callback=progress_cb, fixed_q4=False
             )
     progress_bar.empty()
     progress_placeholder.empty()
@@ -187,7 +177,7 @@ if run:
         "tradelog": tradelog,
         "equity": equity,
         "metrics": m,
-        "params": {"lookback": lookback, "discount": discount, "holding": holding, "fixed_q4": fixed_q4},
+        "params": {"lookback": lookback, "discount": discount, "holding": holding},
         "n_companies": n_companies,
         "benchmark_series": benchmark_series,  # may be from CSV or Yahoo
     }
@@ -207,7 +197,6 @@ with tab_backtest:
         lookback = res["params"]["lookback"]
         discount = res["params"]["discount"]
         holding = res["params"]["holding"]
-        fixed_q4 = res["params"]["fixed_q4"]
         benchmark_series = res.get("benchmark_series")
 
         # Optional date range for chart
@@ -264,7 +253,7 @@ with tab_backtest:
             ax.set_yscale("log")
             ax.legend(loc="upper left")
             ax.grid(True, alpha=0.3, which="both")
-            ax.set_title(f"Lookback={lookback}Q, Discount={discount:.0%}, Hold={holding}Q" + (" [Option A]" if fixed_q4 else ""))
+            ax.set_title(f"Lookback={lookback}Q, Discount={discount:.0%}, Hold={holding}Q")
             fig.tight_layout()
             st.pyplot(fig)
             plt.close()
