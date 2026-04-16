@@ -11,9 +11,7 @@ sys.path.insert(0, str(_SCRIPT_DIR))
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 # Must be first Streamlit command
 st.set_page_config(
@@ -38,18 +36,37 @@ def _data_available():
     except Exception:
         return False
 
-# Optional: Plotly for interactive chart
-try:
-    import plotly.express as px
-    import plotly.graph_objects as go
-    HAS_PLOTLY = True
-except ImportError:
-    HAS_PLOTLY = False
-
+# Shared FCF CSS
 st.markdown("""
 <style>
-    .hero { padding: 1.5rem 0; border-bottom: 1px solid #eee; margin-bottom: 1.5rem; }
-    .param-card { background: #f0f2f6; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.25rem 0; font-size: 0.9rem; }
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1f77b4;
+    }
+    [data-testid="stMetric"] {
+        background-color: white;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    [data-testid="stMetricValue"] {
+        color: #000000 !important;
+    }
+    [data-testid="stMetricLabel"] {
+        color: #000000 !important;
+    }
+    [data-testid="stMetricDelta"] {
+        color: #000000 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -60,8 +77,8 @@ for key, default in [("lookback", 3), ("discount", 0.2), ("holding", 2)]:
     if key not in st.session_state:
         st.session_state[key] = default
 
-# Presets: update session state when clicked
-st.sidebar.header("⚙️ Strategy parameters")
+# ---------------------- Sidebar ----------------------
+st.sidebar.header("⚙️ Strategy Parameters")
 
 with st.sidebar.expander("What do these mean?", expanded=False):
     st.markdown("""
@@ -73,17 +90,15 @@ with st.sidebar.expander("What do these mean?", expanded=False):
 lookback = st.sidebar.slider("Lookback (quarters)", 1, 20, value=st.session_state.get("lookback", 3), key="sb_lookback")
 discount = st.sidebar.slider("Discount to median PE", 0.10, 0.90, value=float(st.session_state.get("discount", 0.2)), step=0.05, key="sb_discount")
 holding = st.sidebar.slider("Holding (quarters)", 1, 5, value=st.session_state.get("holding", 2), key="sb_holding")
-# Persist for next run
 st.session_state["lookback"] = lookback
 st.session_state["discount"] = discount
 st.session_state["holding"] = holding
 
-# Reactive summary
 max_pct = (1 - discount) * 100
 st.sidebar.markdown(f"**Screen:** PE ≤ **{max_pct:.0f}%** of median PE")
 st.sidebar.markdown("---")
 
-# Data status (quick check without loading all CSVs)
+# Data status
 try:
     _n_csvs = len(list(CLEANED_DIR.glob("*.csv"))) if CLEANED_DIR.is_dir() else 0
 except Exception:
@@ -95,14 +110,11 @@ else:
 
 run = st.sidebar.button("▶️ Run backtest", type="primary", use_container_width=True)
 
-# Header
-st.markdown('<div class="hero">', unsafe_allow_html=True)
-st.title("📈 PE Discount-to-Median Backtest")
-st.markdown(
-    "Backtest a strategy that buys stocks when **PE ≤ (1 − discount) × median PE**, holds for **H** quarters, then sells. Compare to NIFTY 50."
-)
-st.caption("**Getting started:** Set parameters in the sidebar → click **Run backtest** → view results in the tabs below.")
-st.markdown('</div>', unsafe_allow_html=True)
+st.sidebar.markdown("---")
+st.sidebar.markdown("[📄 Strategy log (GitHub)](https://github.com/pranami2510-sudo/PE-Backtest/blob/main/strategy_log.md)")
+
+# ---------------------- Main Header ----------------------
+st.markdown('<h1 class="main-header">📈 PE Discount-to-Median Backtest</h1>', unsafe_allow_html=True)
 
 if not _data_available():
     st.warning(
@@ -111,31 +123,7 @@ if not _data_available():
         "To run backtests: clone the repo, add that folder locally, and run `streamlit run streamlit_app.py`, or add a small sample of CSVs to the repo for the web app."
     )
 
-tab_overview, tab_backtest, tab_tradelog, tab_downloads = st.tabs(["📋 Overview", "📊 Backtest & results", "📜 Tradelog", "⬇️ Downloads"])
-
-# Overview
-with tab_overview:
-    st.subheader("Strategy in brief")
-    st.markdown("""
-    1. **Screen** — Each rebalance quarter: median PE over last **L** quarters; keep only **PE ≤ (1 − discount) × median PE**.
-    2. **Buy** — Equal weight at each stock’s last valid day in the quarter.
-    3. **Hold** — **H** quarters.
-    4. **Sell** — Last trading day of exit quarter.
-    5. **Repeat** — No overlapping cohorts.
-    """)
-    st.subheader("Current parameters")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("**Lookback**")
-        st.caption(f"{lookback} quarters")
-    with c2:
-        st.markdown("**Discount**")
-        st.caption(f"{discount:.0%} → buy when PE ≤ {max_pct:.0f}% of median")
-    with c3:
-        st.markdown("**Holding**")
-        st.caption(f"{holding} quarter(s)")
-
-# Run backtest
+# ---------------------- Run Backtest ----------------------
 if run:
     with st.spinner("Loading data..."):
         data = load_all_data(progress=False)
@@ -161,7 +149,7 @@ if run:
     progress_bar.empty()
     progress_placeholder.empty()
 
-    # Fetch NIFTY 50 from Yahoo if no benchmark CSV was used (same as CLI)
+    # Fetch NIFTY 50 from Yahoo if no benchmark CSV was used
     if (benchmark_series is None or len(benchmark_series) == 0) and equity is not None and len(equity) >= 2:
         with st.spinner("Fetching NIFTY 50 benchmark..."):
             benchmark_series = fetch_nifty50_yahoo(
@@ -179,174 +167,206 @@ if run:
         "metrics": m,
         "params": {"lookback": lookback, "discount": discount, "holding": holding},
         "n_companies": n_companies,
-        "benchmark_series": benchmark_series,  # may be from CSV or Yahoo
+        "benchmark_series": benchmark_series,
     }
     st.sidebar.success(f"Loaded {n_companies} companies. Backtest done.")
     st.rerun()
 
-# Backtest tab
-with tab_backtest:
-    if st.session_state.backtest_results is None:
-        st.info("👈 Set parameters in the sidebar and click **Run backtest** to see the equity curve and metrics.")
-        st.caption("Suggested starting point: Lookback 3, Discount 20%, Holding 2.")
-    else:
-        res = st.session_state.backtest_results
-        equity = res["equity"]
-        m = res["metrics"]
-        # One round-trip (one buy + one sell) = one trade; count sells
-        tl = res["tradelog"]
-        num_trades = int((tl["action"] == "sell").sum()) if tl is not None and len(tl) > 0 and "action" in tl.columns else 0
-        lookback = res["params"]["lookback"]
-        discount = res["params"]["discount"]
-        holding = res["params"]["holding"]
-        benchmark_series = res.get("benchmark_series")
+# ---------------------- Display Results ----------------------
+if st.session_state.backtest_results is None:
+    st.info("👈 Set parameters in the sidebar and click **Run backtest** to see results.")
+    st.caption("Suggested starting point: Lookback 3, Discount 20%, Holding 2.")
+else:
+    res = st.session_state.backtest_results
+    equity = res["equity"]
+    m = res["metrics"]
+    tl = res["tradelog"]
+    num_trades = int((tl["action"] == "sell").sum()) if tl is not None and len(tl) > 0 and "action" in tl.columns else 0
+    lookback = res["params"]["lookback"]
+    discount = res["params"]["discount"]
+    holding = res["params"]["holding"]
+    benchmark_series = res.get("benchmark_series")
 
-        # Optional date range for chart
-        chart_start = equity.index.min().date()
-        chart_end = equity.index.max().date()
-        with st.expander("🔍 Zoom chart to date range", expanded=False):
-            dr_col1, dr_col2 = st.columns(2)
-            with dr_col1:
-                chart_start = st.date_input("Start date", value=chart_start, key="chart_start")
-            with dr_col2:
-                chart_end = st.date_input("End date", value=chart_end, key="chart_end")
-        equity_sub = equity[(equity.index.date >= chart_start) & (equity.index.date <= chart_end)]
-        if len(equity_sub) < 2:
-            equity_sub = equity
+    # ---- Strategy Parameters ----
+    st.subheader("⚙️ Strategy Parameters")
+    param_col1, param_col2, param_col3 = st.columns(3)
+    with param_col1:
+        st.metric("Lookback", f"{lookback} Q", help="Quarters of history for median PE")
+    with param_col2:
+        st.metric("Discount", f"{discount:.0%}", help=f"Buy when PE ≤ {(1-discount)*100:.0f}% of median")
+    with param_col3:
+        st.metric("Holding", f"{holding} Q", help="Quarters to hold each cohort")
 
-        st.subheader("Equity curve (strategy vs NIFTY 50)")
-        if HAS_PLOTLY:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=equity_sub.index, y=equity_sub.values, name="Strategy",
-                line=dict(color="#1f77b4", width=2), mode="lines"
-            ))
-            bm_plotted = False
-            if benchmark_series is not None and len(benchmark_series) > 0:
-                bm_cum = (1 + benchmark_series).cumprod()
-                bm_cum = bm_cum / bm_cum.iloc[0]
-                bm_sub = bm_cum[(bm_cum.index.date >= chart_start) & (bm_cum.index.date <= chart_end)]
-                if len(bm_sub) < 2:
-                    bm_sub = bm_cum.reindex(equity_sub.index).ffill().bfill().dropna()
-                if len(bm_sub) > 0:
-                    fig.add_trace(go.Scatter(
-                        x=bm_sub.index, y=bm_sub.values, name="NIFTY 50",
-                        line=dict(color="#e74c3c", width=1.8), mode="lines"
-                    ))
-                    bm_plotted = True
-            fig.update_layout(
-                yaxis_type="log",
-                xaxis_title="Date",
-                yaxis_title="Cumulative return (normalized, start = 1)",
-                hovermode="x unified",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(t=50),
-                template="plotly_white",
-                height=450,
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            if bm_plotted:
-                st.caption("Interactive: zoom, pan, hover for values. Use the toolbar to reset view.")
-            else:
-                st.caption("**NIFTY 50** line not shown: benchmark could not be loaded (e.g. Yahoo Finance unavailable or network). Run locally with internet to see both curves.")
+    # ---- Performance Metrics (8 metrics, 2 rows of 4) ----
+    st.subheader("📊 Performance Metrics")
+
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    with mc1:
+        st.metric("CAGR", f"{m.get('CAGR', 0):.2%}", help="Compound Annual Growth Rate")
+    with mc2:
+        st.metric("Sharpe Ratio", f"{m.get('Sharpe', 0):.2f}", help="Annualized risk-adjusted return")
+    with mc3:
+        st.metric("Calmar Ratio", f"{m.get('Calmar', 0):.2f}", help="CAGR / Max Drawdown")
+    with mc4:
+        st.metric("Max Drawdown", f"{m.get('MaxDD', 0):.2%}", help="Largest peak-to-trough decline")
+
+    mc5, mc6, mc7, mc8 = st.columns(4)
+    with mc5:
+        st.metric("Total Trades", f"{num_trades:,}", help="Number of round-trip trades")
+    with mc6:
+        # Win ratio: count trades where sell price > buy price
+        win_ratio = "N/A"
+        if tl is not None and len(tl) > 0 and "action" in tl.columns and "price" in tl.columns:
+            buys = tl[tl["action"] == "buy"].reset_index(drop=True)
+            sells = tl[tl["action"] == "sell"].reset_index(drop=True)
+            if len(buys) > 0 and len(sells) > 0:
+                # Match by company
+                wins = 0
+                total = 0
+                for company in buys["company"].unique():
+                    cb = buys[buys["company"] == company]["price"].values
+                    cs = sells[sells["company"] == company]["price"].values
+                    pairs = min(len(cb), len(cs))
+                    if pairs > 0:
+                        wins += int((cs[:pairs] > cb[:pairs]).sum())
+                        total += pairs
+                if total > 0:
+                    win_ratio = f"{wins/total:.2%}"
+        st.metric("Win Ratio", win_ratio, help="Percentage of profitable trades")
+    with mc7:
+        st.metric("Initial Capital", "₹1.00", help="Normalized starting value")
+    with mc8:
+        final_val = equity.iloc[-1] if len(equity) > 0 else 0
+        delta_val = f"{final_val - 1:.2f}" if final_val != 0 else None
+        st.metric("Final Value", f"₹{final_val:.2f}", delta=delta_val, help="Final normalized portfolio value")
+
+    # ---- Download Buttons ----
+    st.subheader("📂 Download Strategy Files")
+    p = res["params"]
+    run_label = f"L{p['lookback']}_d{int(p['discount']*100)}_H{p['holding']}"
+
+    dl_col1, dl_col2, dl_col3 = st.columns(3)
+    with dl_col1:
+        equity_df = equity.to_frame(name="Value")
+        equity_df.index.name = "Date"
+        st.download_button("📥 Download Equity Curve (CSV)", data=equity_df.to_csv(),
+                          file_name=f"equity_curve_{run_label}.csv", mime="text/csv",
+                          key="dl_equity", use_container_width=True)
+    with dl_col2:
+        if tl is not None and len(tl) > 0:
+            st.download_button("📥 Download Tradelog (CSV)", data=tl.to_csv(index=False),
+                              file_name=f"tradelog_{run_label}.csv", mime="text/csv",
+                              key="dl_tradelog", use_container_width=True)
         else:
-            fig, ax = plt.subplots(figsize=(11, 5))
-            ax.plot(equity_sub.index, equity_sub.values, label="Strategy", color="#1f77b4", linewidth=1.5)
-            bm_plotted = False
-            if benchmark_series is not None and len(benchmark_series) > 0:
-                bm_cum = (1 + benchmark_series).cumprod()
-                bm_cum = bm_cum / bm_cum.iloc[0]
-                bm_sub = bm_cum[(bm_cum.index >= equity_sub.index.min()) & (bm_cum.index <= equity_sub.index.max())]
-                if len(bm_sub) < 2:
-                    bm_sub = bm_cum.reindex(equity_sub.index).ffill().bfill().dropna()
-                if len(bm_sub) > 0:
-                    ax.plot(bm_sub.index, bm_sub.values, label="NIFTY 50", color="#e74c3c", linewidth=1.8, alpha=0.9)
-                    bm_plotted = True
-            if not bm_plotted:
-                st.caption("**NIFTY 50** line not shown: benchmark could not be loaded (e.g. Yahoo Finance unavailable or network). Run locally with internet to see both curves.")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Cumulative return (normalized, start = 1)")
-            ax.set_yscale("log")
-            ax.legend(loc="upper left")
-            ax.grid(True, alpha=0.3, which="both")
-            ax.set_title(f"Lookback={lookback}Q, Discount={discount:.0%}, Hold={holding}Q")
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            st.info("No tradelog for this run.")
+    with dl_col3:
+        summary_data = {
+            'Metric': ['CAGR', 'Sharpe', 'Calmar', 'Max Drawdown', 'Trades'],
+            'Value': [f"{m.get('CAGR',0):.2%}", f"{m.get('Sharpe',0):.2f}",
+                     f"{m.get('Calmar',0):.2f}", f"{m.get('MaxDD',0):.2%}", str(num_trades)]
+        }
+        summary_csv = pd.DataFrame(summary_data).to_csv(index=False)
+        st.download_button("📥 Download Summary (CSV)", data=summary_csv,
+                          file_name=f"summary_{run_label}.csv", mime="text/csv",
+                          key="dl_summary", use_container_width=True)
 
-        st.subheader("Performance metrics")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Trades", num_trades)
-        col2.metric("CAGR", f"{m.get('CAGR', 0):.2%}")
-        col3.metric("Sharpe (ann.)", f"{m.get('Sharpe', 0):.2f}")
-        col4.metric("Calmar", f"{m.get('Calmar', 0):.2f}")
-        col5.metric("Max drawdown", f"{m.get('MaxDD', 0):.2%}")
-        if "Benchmark_CAGR" in m:
-            st.caption(f"**Benchmark (NIFTY 50):** CAGR {m['Benchmark_CAGR']:.2%}  ·  Sharpe {m.get('Benchmark_Sharpe', 0):.2f}")
-        with st.expander("About these metrics", expanded=False):
-            st.markdown("""
-            - **CAGR:** Compound annual growth rate of the strategy.
-            - **Sharpe (ann.):** Annualized Sharpe ratio (risk-adjusted return; higher is better).
-            - **Calmar:** CAGR divided by max drawdown (higher is better).
-            - **Max drawdown:** Largest peak-to-trough decline.
-            """)
+    # ---- Equity Curve (Plotly) ----
+    st.subheader("📉 Equity Curve")
 
-# Tradelog tab
-with tab_tradelog:
-    if st.session_state.backtest_results is None:
-        st.info("Run a backtest first to see the tradelog.")
-    else:
-        tradelog = st.session_state.backtest_results["tradelog"]
-        if tradelog is not None and len(tradelog) > 0:
-            tradelog["date"] = pd.to_datetime(tradelog["date"])
-            st.caption("Filter below.")
+    # Optional date range zoom
+    chart_start = equity.index.min().date()
+    chart_end = equity.index.max().date()
+    with st.expander("🔍 Zoom chart to date range", expanded=False):
+        dr_col1, dr_col2 = st.columns(2)
+        with dr_col1:
+            chart_start = st.date_input("Start date", value=chart_start, key="chart_start")
+        with dr_col2:
+            chart_end = st.date_input("End date", value=chart_end, key="chart_end")
+    equity_sub = equity[(equity.index.date >= chart_start) & (equity.index.date <= chart_end)]
+    if len(equity_sub) < 2:
+        equity_sub = equity
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=equity_sub.index, y=equity_sub.values, name="Strategy",
+        line=dict(color="#1f77b4", width=2.5), mode="lines"
+    ))
+
+    bm_plotted = False
+    if benchmark_series is not None and len(benchmark_series) > 0:
+        bm_cum = (1 + benchmark_series).cumprod()
+        bm_cum = bm_cum / bm_cum.iloc[0]
+        bm_sub = bm_cum[(bm_cum.index.date >= chart_start) & (bm_cum.index.date <= chart_end)]
+        if len(bm_sub) < 2:
+            bm_sub = bm_cum.reindex(equity_sub.index).ffill().bfill().dropna()
+        if len(bm_sub) > 0:
+            fig.add_trace(go.Scatter(
+                x=bm_sub.index, y=bm_sub.values, name="NIFTY 50",
+                line=dict(color="#ff7f0e", width=2, dash="dash"), mode="lines"
+            ))
+            bm_plotted = True
+
+    fig.add_hline(y=1.0, line_dash="dot", line_color="#666666",
+                 annotation_text="Initial Capital", annotation_position="right")
+
+    fig.update_layout(
+        yaxis_type="log",
+        xaxis_title="Date",
+        yaxis_title="Cumulative return (normalized, start = 1)",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        template="plotly_white",
+        height=500,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    if not bm_plotted:
+        st.caption("**NIFTY 50** line not shown: benchmark could not be loaded (e.g. Yahoo Finance unavailable).")
+
+    # ---- Benchmark Comparison ----
+    if bm_plotted and "Benchmark_CAGR" in m:
+        st.subheader("📊 Strategy vs Benchmark Comparison")
+        comp1, comp2, comp3 = st.columns(3)
+        with comp1:
+            st.metric("Strategy CAGR", f"{m.get('CAGR', 0):.2%}")
+        with comp2:
+            st.metric("Benchmark CAGR", f"{m.get('Benchmark_CAGR', 0):.2%}")
+        with comp3:
+            excess = m.get('CAGR', 0) - m.get('Benchmark_CAGR', 0)
+            st.metric("Excess Return", f"{excess:.2%}", delta=f"{excess:.2%}")
+
+    # ---- Tradelog (expandable) ----
+    if tl is not None and len(tl) > 0:
+        with st.expander("📜 Tradelog", expanded=False):
+            tl_display = tl.copy()
+            tl_display["date"] = pd.to_datetime(tl_display["date"])
+
             filter_col1, filter_col2, filter_col3 = st.columns(3)
             with filter_col1:
                 action_filter = st.selectbox("Action", ["All", "buy", "sell"], key="tl_action")
             with filter_col2:
-                companies = sorted(tradelog["company"].dropna().unique().tolist())
+                companies = sorted(tl_display["company"].dropna().unique().tolist())
                 company_filter = st.multiselect("Company (leave empty = all)", options=companies, default=[], key="tl_company")
             with filter_col3:
-                min_date = tradelog["date"].min().date()
-                max_date = tradelog["date"].max().date()
-                date_range = st.date_input("Date range (start → end)", value=(min_date, max_date), key="tl_date", help="Select start and end date for the tradelog.")
-            df_show = tradelog.copy()
+                min_date = tl_display["date"].min().date()
+                max_date = tl_display["date"].max().date()
+                date_range = st.date_input("Date range", value=(min_date, max_date), key="tl_date")
+
+            df_show = tl_display.copy()
             if action_filter != "All":
                 df_show = df_show[df_show["action"] == action_filter]
             if company_filter:
                 df_show = df_show[df_show["company"].isin(company_filter)]
             if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
                 df_show = df_show[(df_show["date"].dt.date >= date_range[0]) & (df_show["date"].dt.date <= date_range[1])]
-            total_rows = len(tradelog)
-            shown_rows = len(df_show)
-            st.caption(f"Showing **{shown_rows}** of **{total_rows}** trades.")
+
+            st.caption(f"Showing **{len(df_show)}** of **{len(tl_display)}** trades.")
             st.dataframe(df_show, use_container_width=True, height=400)
-        else:
-            st.write("No trades in this run.")
 
-# Downloads tab
-with tab_downloads:
-    if st.session_state.backtest_results is None:
-        st.info("Run a backtest first to download results.")
-    else:
-        res = st.session_state.backtest_results
-        equity = res["equity"]
-        tradelog = res["tradelog"]
-        p = res["params"]
-        run_label = f"L{p['lookback']}_d{int(p['discount']*100)}_H{p['holding']}"
-        st.caption(f"Files from latest run: Lookback {p['lookback']}, Discount {p['discount']:.0%}, Holding {p['holding']}Q.")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.subheader("Equity curve")
-            equity_df = equity.to_frame(name="Value")
-            equity_df.index.name = "Date"
-            st.download_button("Download equity_curve.csv", data=equity_df.to_csv(), file_name=f"equity_curve_{run_label}.csv", mime="text/csv", key="dl_equity")
-        with col_b:
-            st.subheader("Tradelog")
-            if tradelog is not None and len(tradelog) > 0:
-                st.download_button("Download tradelog.csv", data=tradelog.to_csv(index=False), file_name=f"tradelog_{run_label}.csv", mime="text/csv", key="dl_tradelog")
-            else:
-                st.caption("No tradelog for this run.")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("[📄 Strategy log (GitHub)](https://github.com/pranami2510-sudo/PE-Backtest/blob/main/strategy_log.md)")
+# Footer
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; color: #666; padding: 20px;'>"
+    "📈 PE Discount Backtest | Filter Coffee Finance"
+    "</div>",
+    unsafe_allow_html=True
+)
