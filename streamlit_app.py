@@ -36,39 +36,9 @@ def _data_available():
     except Exception:
         return False
 
-# Shared FCF CSS
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
-    }
-    [data-testid="stMetric"] {
-        background-color: white;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    [data-testid="stMetricValue"] {
-        color: #000000 !important;
-    }
-    [data-testid="stMetricLabel"] {
-        color: #000000 !important;
-    }
-    [data-testid="stMetricDelta"] {
-        color: #000000 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+from fcf_branding import apply_theme, render_header, render_footer
+
+apply_theme()
 
 # Session state
 if "backtest_results" not in st.session_state:
@@ -114,7 +84,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("[📄 Strategy log (GitHub)](https://github.com/pranami2510-sudo/PE-Backtest/blob/main/strategy_log.md)")
 
 # ---------------------- Main Header ----------------------
-st.markdown('<h1 class="main-header">📈 PE Discount-to-Median Backtest</h1>', unsafe_allow_html=True)
+render_header("📈 PE Discount Backtest", "Price-to-Earnings discount-to-median — strategy backtest")
 
 if not _data_available():
     st.warning(
@@ -362,11 +332,4 @@ else:
             st.caption(f"Showing **{len(df_show)}** of **{len(tl_display)}** trades.")
             st.dataframe(df_show, use_container_width=True, height=400)
 
-# Footer
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: #666; padding: 20px;'>"
-    "📈 PE Discount Backtest | Filter Coffee Finance"
-    "</div>",
-    unsafe_allow_html=True
-)
+render_footer()
