@@ -84,7 +84,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("[📄 Strategy log (GitHub)](https://github.com/pranami2510-sudo/PE-Backtest/blob/main/strategy_log.md)")
 
 # ---------------------- Main Header ----------------------
-render_header("📈 PE Discount Backtest", "Price-to-Earnings discount-to-median — strategy backtest")
+render_header("PE Discount Backtest", "Price-to-Earnings discount-to-median — strategy backtest")
 
 if not _data_available():
     st.warning(
